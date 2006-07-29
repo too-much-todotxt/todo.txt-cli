@@ -1,11 +1,14 @@
 #! /bin/sh
 
+# NOTE:  Todo.sh requires the .todo configuration file to run.
+# Place the .todo file in your home directory or use the -d option for a custom location.
+
 version() { sed -e 's/^    //' <<EndVersion
         TODO.TXT Manager
-        Version 1.6.3
+        Version 1.7.3
         Author:  Gina Trapani (ginatrapani@gmail.com)
         Release date:  5/11/2006
-        Last updated:  7/6/2006
+        Last updated:  7/29/2006
         License:  GPL, http://www.gnu.org/copyleft/gpl.html
         More information and mailing list at http://todotxt.com
 EndVersion
@@ -13,17 +16,29 @@ EndVersion
 }
 
 usage()
+{
+    sed -e 's/^    //' <<EndUsage 
+    Usage: todo.sh  [-fhpqvV] [-d todo_config] action [task_number] [task_description]
+    Try 'todo.sh -h' for more information.    
+EndUsage
+    exit 1
+}
+
+
+help()
 { 
-    sed -e 's/^    //' <<EndUsage
-      Usage: $0 [options] [ACTION] [PARAM...]
+    sed -e 's/^    //' <<EndHelp
+      Usage:  todo.sh [-fhpqvV] [-d todo_config] action [task_number] [task_description]
 
       Actions:
         add "THING I NEED TO DO p:project @context"
+        a "THING I NEED TO DO p:project @context"
           Adds TODO ITEM to your todo.txt.
           Project and context notation optional.
           Quotes optional.
 
         append NUMBER "TEXT TO APPEND"
+        app NUMBER "TEXT TO APPEND"
           Adds TEXT TO APPEND to the end of the todo on line NUMBER.
           Quotes optional.
 
@@ -31,27 +46,38 @@ usage()
           Moves done items from todo.txt to done.txt.
 
         del NUMBER
+        rm NUMBER
           Deletes the item on line NUMBER in todo.txt.
 
         do NUMBER
           Marks item on line NUMBER as done in todo.txt.
 
-        list [TERM] [[TERM]...]
+        list [TERM...] 
+        ls [TERM...]
           Displays all todo's that contain TERM(s) sorted by priority with line
           numbers.  If no TERM specified, lists entire todo.txt.
 
+        listall [TERM...]
+        lsa [TERM...]
+          Displays all the lines in todo.txt AND done.txt that contain TERM(s)
+          sorted by priority with line  numbers.  If no TERM specified, lists
+          entire todo.txt AND done.txt concatenated and sorted.
+
         listpri [PRIORITY]
+        lsp [PRIORITY]
           Displays all items prioritized PRIORITY.
           If no PRIORITY specified, lists all prioritized items.
 
         prepend NUMBER "TEXT TO PREPEND"
+        prep NUMBER "TEXT TO PREPEND"
           Adds TEXT TO PREPEND to the beginning of the todo on line NUMBER.
           Quotes optional.
 
         pri NUMBER PRIORITY
-          Adds PRIORITY to todo on line NUMBER.  If the item is already 
-	   prioritized, replaces current priority with new PRIORITY.
-	   PRIORITY must be an uppercase letter between A and Z.
+        p NUMBER PRIORITY
+          Adds PRIORITY to todo on line NUMBER.  If the item is already
+          prioritized, replaces current priority with new PRIORITY.
+          PRIORITY must be an uppercase letter between A and Z.
 
         replace NUMBER "UPDATED TODO"
           Replaces todo on line NUMBER with UPDATED TODO.
@@ -65,13 +91,17 @@ usage()
       Options:
         -d CONFIG_FILE
             Use a configuration file other than the default ~/.todo
+        -f
+        	Forces actions without confirmation or interactive input
+        -h
+            Display this help message
         -p
-            Plain mode, turns off colors
-        -q 
-            Quiet mode, muffles chatty confirmation messages
+            Plain mode turns off colors
+        -v 
+            Verbose mode turns on confirmation messages
         -V 
-            Displays version, license and credits.
-EndUsage
+            Displays version, license and credits
+EndHelp
 
     exit 1
 }
@@ -91,21 +121,31 @@ cleanup()
 
 # == PROCESS OPTIONS ==
 # defaults
-QUIET=0
+VERBOSE=0
 PLAIN=0
 CFG_FILE=$HOME/.todo
+FORCE=0
 
-while getopts ":pqVd:" Option
+while getopts ":fhpqvVd:" Option
 do
   case $Option in
+    d)  
+	CFG_FILE=$OPTARG
+	;;
+	f)
+	FORCE=1
+	;;
+	h)
+	help
+	;;
     p )
 	PLAIN=1 
 	;;
     q ) 
 	QUIET=1
 	;;
-    d)  
-	CFG_FILE=$OPTARG
+    v ) 
+	VERBOSE=1
 	;;
     V)
 	version
@@ -141,31 +181,42 @@ fi
 shopt -s extglob
 
 # == HANDLE ACTION ==
-action=$1
+action=$( printf "%s\n" "$1" | tr 'A-Z' 'a-z' )
 
 case $action in 
-"add" )
-	[ -z "$2" ] && die "usage: $0 add \"TODO ITEM\""
-	shift
+"add" | "a")
+	if [[ -z "$2" && $FORCE = 0 ]]; then
+		echo -n "Add: "
+		read input
+	else
+		[ -z "$2" ] && die "usage: $0 add \"TODO ITEM\""
+		shift
+		input=$*
+	fi
+	echo "$input" >> "$TODO_FILE"
 
-	echo "$*" >> "$TODO_FILE"
 	TASKNUM=$(wc -l "$TODO_FILE" | sed 's/^[[:space:]]*\([0-9]*\).*/\1/')
-	[[ $QUIET = 1 ]] || echo "TODO: '$*' added on line $TASKNUM."
+	[[ $VERBOSE = 1 ]] && echo "TODO: '$input' added on line $TASKNUM."
 	cleanup;;
 
-"append" )
+"append" | "app" )
 	errmsg="usage: $0 append ITEM# \"TEXT TO APPEND\""
 	shift; item=$1; shift
 
 	[ -z "$item" ] && die "$errmsg"
 	[[ "$item" = +([0-9]) ]] || die "$errmsg"
 
-        # made the sed delimiter a pipe | b/c you might want to add text with slashes, like a URL
-        # TODO: check if incoming text contains a pipe and escape it
+	if [[ -z "$1" && $FORCE = 0 ]]; then
+		echo -n "Append: "
+		read input
+	else
+		input=$*
+	fi
+
 	if sed -ne "$item p" "$TODO_FILE" | grep "^."; then
-		if sed -i.bak $item" s|^.*|& $*|" "$TODO_FILE"; then
+		if sed -i.bak $item" s|^.*|& $input|" "$TODO_FILE"; then
 		        NEWTODO=$(sed "$item!d" "$TODO_FILE")
-		        [[ $QUIET = 1 ]] || echo "$item: $NEWTODO"
+		        [[ $VERBOSE = 1 ]] && echo "$item: $NEWTODO"
 		else
 			echo "TODO:  Error appending task $item."
 		fi
@@ -175,25 +226,31 @@ case $action in
 	cleanup;;
 
 "archive" )
-	[[ $QUIET = 1 ]] || grep "^x " "$TODO_FILE"
+	[[ $VERBOSE = 1 ]] && grep "^x " "$TODO_FILE"
 	grep "^x " "$TODO_FILE" >> "$DONE_FILE"
 	sed -i.bak '/^x /d' "$TODO_FILE"
-        [[ $QUIET = 1 ]] || echo "--"
-        [[ $QUIET = 1 ]] || echo "TODO:  Items marked as done have been moved from $TODO_FILE to $DONE_FILE."
+        [[ $VERBOSE = 1 ]] && echo "--"
+        [[ $VERBOSE = 1 ]] && echo "TODO:  Items marked as done have been moved from $TODO_FILE to $DONE_FILE."
 	cleanup;;
 
-"del" )
+"del" | "rm" )
 	errmsg="usage: $0 del ITEM#"
 	item=$2
 	[ -z "$item" ] && die "$errmsg"
 	[[ "$item" = +([0-9]) ]] || die "$errmsg"
 	if sed -ne "$item p" "$TODO_FILE" | grep "^."; then
-		DELETME=$(sed "$2!d" "$TODO_FILE")
-	        echo "Delete '$DELETME'?  (y/n)"
-		read ANSWER
-	        if [ "$ANSWER" = "y" ]; then
+		DELETEME=$(sed "$2!d" "$TODO_FILE")
+
+		if  [ $FORCE = 0 ]; then
+		    echo "Delete '$DELETEME'?  (y/n)"
+			read ANSWER
+		else
+			ANSWER="y"
+		fi
+		
+	    if [ "$ANSWER" = "y" ]; then
 		       sed -i.bak -e $2"s/^.*//" -e '/./!d' "$TODO_FILE"
-		       [[ $QUIET = 1 ]] || echo "TODO:  '$DELETME' deleted."
+		       [[ $VERBOSE = 1 ]] && echo "TODO:  '$DELETEME' deleted."
 		       cleanup
 		else
 			echo "TODO:  No tasks were deleted."
@@ -210,58 +267,101 @@ case $action in
 
 	if sed -ne "$item p" "$TODO_FILE" | grep "^."; then
 		now=`date '+%Y-%m-%d'`
+		# remove priority once item is done
+		sed -i.bak -e $2"s/^(.*) //" -e $2"s/^//" "$TODO_FILE"
 		sed -i.bak $2"s|^|&x $now |" "$TODO_FILE"
 		NEWTODO=$(sed "$2!d" "$TODO_FILE")
-	        [[ $QUIET = 1 ]] || echo "$item: $NEWTODO"
-	        [[ $QUIET = 1 ]] || echo "TODO: $item marked as done."
+	        [[ $VERBOSE = 1 ]] && echo "$item: $NEWTODO"
+	        [[ $VERBOSE = 1 ]] && echo "TODO: $item marked as done."
 		cleanup
 	else
 		echo "$item:  No such todo."
 	fi ;;
 
-"list" )
+"list" | "ls" )
 	item=$2
 	if [ -z "$item" ]; then
-		# Now in COLOR!  with padding!
-		echo -e "`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1 /' | sed 's/^ /0/' | sort -k2 | sed 's/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed 's/\(.*(B).*\)/'$PRI_B'\1'$'/g' | sed 's/\(.*(C).* \)/'$PRI_C'\1'$'/g' | sed 's/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/g'`"
-
+		echo -e "`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1 /' | sed 's/^ /0/' | sort -f -k2 | sed '/^[0-9][0-9] x /!s/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(B).*\)/'$PRI_B'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(C).*\)/'$PRI_C'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/'`"
 		echo "--"
 		NUMTASKS=$(wc -l "$TODO_FILE" | sed 's/^[[:space:]]*\([0-9]*\).*/\1/')
 		echo "TODO: $NUMTASKS tasks in $TODO_FILE."
 	else
-		command=`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1  /' | sed 's/^ /0/' | sort -k2 | sed 's/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed 's/\(.*(B).*\)/'$PRI_B'\1'$'/g' | sed 's/\(.*(C).*\)/'$PRI_C'\1'$'/g'  |  sed 's/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/g' | grep -i $item `
+		command=`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1 /' | sed 's/^ /0/' | sort -f -k2 | sed '/^[0-9][0-9] x /!s/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(B).*\)/'$PRI_B'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(C).*\)/'$PRI_C'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/' | grep -i $item `
 		shift
 		shift
 		for i in $*
 			do
 			command=`echo "$command" | grep -i $i `
 			done
-		command=`echo "$command" | sort -k2`
+		command=`echo "$command" | sort -f -k2`
 
 		echo -e "$command"
 	fi
 	cleanup ;;
 
-"listpri" )
-	pri=$2
-	if [ -z "$pri" ]; then
-		echo -e "`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1  /' | sed 's/^ /0/' | sort -k2 |  sed 's/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed  's/\(.*(B).*\)/'$PRI_B'\1'$'/g' | sed 's/\(.*(C).*\)/'$PRI_C'\1'$'/g'  | sed 's/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/g'`" | grep \([A-Z]\)
+"listall" | "lsa" )
+	item=$2
+       cat "$TODO_FILE" "$DONE_FILE" > "$TMP_FILE"
+
+	if [ -z "$item" ]; then
+		echo -e "`sed = "$TMP_FILE" | sed 'N; s/^/  /; s/ *\(.\{3,\}\)\n/\1 /' | sed 's/^  /00/' | sed 's/^ /0/' | sort -f -k2 | sed '/^[0-9][0-9][0-9] x /!s/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed '/^[0-9][0-9][0-9] x /!s/\(.*(B).*\)/'$PRI_B'\1'$DEFAULT'/g' | sed '/^[0-9][0-9][0-9] x /!s/\(.*(C).*\)/'$PRI_C'\1'$DEFAULT'/g' | sed '/^[0-9][0-9][0-9] x /!s/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/'`"
 	else
-		echo -e "`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1  /' | sed 's/^ /0/' |  sort -k2 |  sed 's/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed  's/\(.*(B).*\)/'$PRI_B'\1'$'/g' | sed 's/\(.*(C).*\)/'$PRI_C'\1'$'/g'  | sed 's/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/g'`" | grep \($pri\)
+		command=`sed = "$TMP_FILE" | sed 'N; s/^/  /; s/ *\(.\{3,\}\)\n/\1 /' | sed 's/^  /00/' | sed 's/^ /0/' | sort -f -k2 | sed '/^[0-9][0-9][0-9] x /!s/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed '/^[0-9][0-9][0-9] x /!s/\(.*(B).*\)/'$PRI_B'\1'$DEFAULT'/g' | sed '/^[0-9][0-9][0-9] x /!s/\(.*(C).*\)/'$PRI_C'\1'$DEFAULT'/g' | sed '/^[0-9][0-9][0-9] x /!s/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/' | grep -i $item `
+		shift
+		shift
+		for i in $*
+			do
+			command=`echo "$command" | grep -i $i `
+			done
+		command=`echo "$command" | sort -f -k2`
+
+		echo -e "$command"
+	fi
+	cleanup ;;
+
+"listpri" | "lsp" )
+	pri=$( printf "%s\n" "$2" | tr 'a-z' 'A-Z' )
+
+	errmsg="usage: $0 listpri PRIORITY  
+note:  PRIORITY must a single letter from A to Z."
+
+	if [ -z "$pri" ]; then
+		echo -e "`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1 /' | sed 's/^ /0/' | sort -f -k2 |  sed 's/^ /0/' | sort -f -k2 | sed '/^[0-9][0-9] x /!s/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(B).*\)/'$PRI_B'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(C).*\)/'$PRI_C'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/'`" | grep \([A-Z]\)
+		if [ $VERBOSE = 1 ]; then
+			echo "--"
+			NUMTASKS=$(grep \([A-Z]\) "$TODO_FILE" | wc -l | sed 's/^[[:space:]]*\([0-9]*\).*/\1/')
+			echo "TODO: $NUMTASKS prioritized tasks in $TODO_FILE."
+		fi
+	else
+		[[ "$pri" = +([A-Z]) ]] || die "$errmsg"
+
+		echo -e "`sed = "$TODO_FILE" | sed 'N; s/^/  /; s/ *\(.\{2,\}\)\n/\1 /' | sed 's/^ /0/' |  sort -f -k2 |  sed 's/^ /0/' | sort -f -k2 | sed '/^[0-9][0-9] x /!s/\(.*(A).*\)/'$PRI_A'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(B).*\)/'$PRI_B'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*(C).*\)/'$PRI_C'\1'$DEFAULT'/g' | sed '/^[0-9][0-9] x /!s/\(.*([A-Z]).*\)/'$PRI_X'\1'$DEFAULT'/'`" | grep \($pri\)
+		if [ $VERBOSE = 1 ]; then
+			echo "--"
+			NUMTASKS=$(grep \($pri\) "$TODO_FILE" | wc -l | sed 's/^[[:space:]]*\([0-9]*\).*/\1/')
+			echo "TODO: $NUMTASKS tasks prioritized $pri in $TODO_FILE."
+		fi
+
 	fi
 	cleanup;;
 
-"prepend" )
+"prepend" | "prep" )
 	errmsg="usage: $0 prepend ITEM# \"TEXT TO PREPEND\""
 	shift; item=$1; shift
-
+	
 	[ -z "$item" ] && die "$errmsg"
 	[[ "$item" = +([0-9]) ]] || die "$errmsg"
 
-        # made the sed delimiter a pipe | b/c you might want to add text with slashes, like a URL
-        # TODO: check if incoming text contains a pipe and escape it
+	if [[ -z "$1" && $FORCE = 0 ]]; then
+		echo -n "Prepend: "
+		read input
+	else
+		input=$*
+	fi
+
+
 	if sed -ne "$item p" "$TODO_FILE" | grep "^."; then
-		if sed -i.bak $item" s|^.*|$* &|" "$TODO_FILE"; then
+		if sed -i.bak $item" s|^.*|$input &|" "$TODO_FILE"; then
 		        NEWTODO=$(sed "$item!d" "$TODO_FILE")
 		        echo "$item: $NEWTODO"
 		else
@@ -271,11 +371,12 @@ case $action in
 		echo "$item: No such todo."
 	fi
 	cleanup;;
-"pri" )
+"pri" | "p" )
 	item=$2
-	newpri=$3
+	newpri=$( printf "%s\n" "$3" | tr 'a-z' 'A-Z' )
+
 	errmsg="usage: $0 pri ITEM# PRIORITY  
-note:  PRIORITY must be uppercase to maintain sort order."
+note:  PRIORITY must be anywhere from A to Z."
 
 	[ "$#" -ne 3 ] && die "$errmsg"
 	[[ "$item" = +([0-9]) ]] || die "$errmsg"
@@ -285,11 +386,10 @@ note:  PRIORITY must be uppercase to maintain sort order."
 
         if [ "$?" -eq 0 ]; then
 		#it's all good, continue
-		sed -i.bak -e $2"s/^(.*) //" -e $2"s/^/($3) /" "$TODO_FILE"
-                NEWTODO=$(sed "$2!d" "$TODO_FILE")
-		[[ $QUIET = 1 ]] || echo -e "`echo "$item: $NEWTODO"`"
-                
-                [[ $QUIET = 1 ]] || echo "TODO: $item prioritized ($newpri)."
+		sed -i.bak -e $2"s/^(.*) //" -e $2"s/^/($newpri) /" "$TODO_FILE"
+              NEWTODO=$(sed "$2!d" "$TODO_FILE")
+		[[ $VERBOSE = 1 ]] && echo -e "`echo "$item: $NEWTODO"`"
+              [[ $VERBOSE = 1 ]] && echo "TODO: $item prioritized ($newpri)."
 		cleanup
         else
 		die "$errmsg"
@@ -297,22 +397,28 @@ note:  PRIORITY must be uppercase to maintain sort order."
 "remdup" )
 	cp "$TODO_FILE" "$TMP_FILE"
 	cat "$TMP_FILE" | sed -n 'G; s/\n/&&/; /^\([ -~]*\n\).*\n\1/d; s/\n//; h; P' > "$TODO_FILE"
-	[[ $QUIET = 1 ]] || echo "TODO: Duplicate tasks have been removed."
+	[[ $VERBOSE = 1 ]] && echo "TODO: Duplicate tasks have been removed."
 	cleanup;;
 
 "replace" )
 	errmsg="usage: $0 replace ITEM# \"UPDATED ITEM\""
 	shift; item=$1; shift
+
 	[ -z "$item" ] && die "$errmsg"
 	[[ "$item" = +([0-9]) ]] || die "$errmsg"
 	
+	if [[ -z "$1" && $FORCE = 0 ]]; then
+		echo -n "Replacement: "
+		read input
+	else
+		input=$*
+	fi
+	
 	if sed -ne "$item p" "$TODO_FILE" | grep "^."; then
-		# made the sed delimiter a pipe | b/c you might want to add text with slashes, like a URL
-		# TODO: check if incoming text contains a pipe and escape it
-		sed -i.bak $item" s|^.*|$*|" "$TODO_FILE"
-		[[ $QUIET = 1 ]] || NEWTODO=$(head -$item "$TODO_FILE" | tail -1)
-		[[ $QUIET = 1 ]] || echo "replaced with"
-		[[ $QUIET = 1 ]] || echo "$item: $NEWTODO"
+		sed -i.bak $item" s|^.*|$input|" "$TODO_FILE"
+		[[ $VERBOSE = 1 ]] && NEWTODO=$(head -$item "$TODO_FILE" | tail -1)
+		[[ $VERBOSE = 1 ]] && echo "replaced with"
+		[[ $VERBOSE = 1 ]] && echo "$item: $NEWTODO"
 	else
 		echo "$item: No such todo."
 	fi
@@ -333,9 +439,10 @@ note:  PRIORITY must be uppercase to maintain sort order."
 	TECHO=$(echo $(date +%Y-%m-%d-%T); echo ' '; echo $TOTAL; echo ' ';
 	echo $TDONE)
 	echo $TECHO >> "$REPORT_FILE"
-	[[ $QUIET = 1 ]] || echo "TODO:  Report file updated."
+	[[ $VERBOSE = 1 ]] && echo "TODO:  Report file updated."
 	cat "$REPORT_FILE"
 	cleanup;;
 * )
 	usage
 esac
+

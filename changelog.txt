@@ -1,5 +1,24 @@
 Todo.sh CHANGELOG
 
+    * 7/29/2006, v 1.7.3
+      - Update:  Added short action aliases -  add/a, list/ls, listpri/lsp, listall/lsa, prepend/prep, append/app, del/rm
+    * 7/28/2006, v 1.7.2
+      - Update:  do action removes priority from task automatically
+      - Update:  actions are now case-insensitive (ie, todo.sh Add will work)
+      - Update:  listpri automatically capitalizes lowercase priorities
+      - Update:  listpri now displays friendly error message, and the # of tasks returned in verbose mode
+    * 7/21/2006, v 1.7.1
+      - I'm a big dummy and didn't keep track of what I fixed here.  Sorry!
+    * 7/19/2006, v 1.7
+      - New Feature:  Interactive add, append, prepend and replace (tx, Ben!)
+      - New Feature:  Option -f forces delete action and disables interactive input (for todobot.pl)
+      - New Feature:  Action listall displays tasks from both todo.txt and done.txt
+      - New Feature:  Option -h displays full help message.
+      - Update:  A very short version of usage message displays by default instead of the long version.
+      - Update:  -q option deprecated;  Use -v to turn on verbose mode 
+      - Bug fix:  No colors display for done tasks (tx, Tanja!)
+      - Bug fix:  Sort is now case-insensitive (tx, Lonnie!)
+      - Style:  Comment in info about .todo file being required
     * 7/6/2006, v 1.6.3
       - New feature:  Line numbers now padded (up to 100) (thanks, Tanja!)
     * 7/5/2006, v 1.6.2
