@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 
 # NOTE:  Todo.sh requires the .todo configuration file to run.
 # Place the .todo file in your home directory or use the -d option for a custom location.
