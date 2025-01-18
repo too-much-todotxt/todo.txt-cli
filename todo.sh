@@ -1,4 +1,4 @@
-#! /bin/sh
+#!/bin/bash
 
 version() { sed -e 's/^    //' <<EndVersion
         TODO.TXT Manager
